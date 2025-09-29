@@ -145,19 +145,30 @@ def main(args):
             f"z{args.latent_size}.pth"
         )
 
-        torch.save(vae.state_dict(), os.path.join("weights", weight_filename))
-        print(f"Saved weights to weights/{weight_filename}")
+        os.makedirs("weights", exist_ok=True)
+
+        torch.save({
+            "state_dict": vae.state_dict(),
+            "hyperparams": {
+                "encoder_layer_sizes": args.encoder_layer_sizes,
+                "decoder_layer_sizes": args.decoder_layer_sizes,
+                "latent_size": args.latent_size,
+                "conditional": args.conditional
+            }
+        }, os.path.join("weights", weight_filename))
+
+        print(f"Saved weights and hyperparameters to weights/{weight_filename}")
 
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--batch_size", type=int, default=64)
-    parser.add_argument("--learning_rate", type=float, default=0.001)
-    parser.add_argument("--encoder_layer_sizes", type=list, default=[784, 256])
-    parser.add_argument("--decoder_layer_sizes", type=list, default=[256, 784])
+    parser.add_argument("--epochs", type=int, default=30)
+    parser.add_argument("--batch_size", type=int, default=128)
+    parser.add_argument("--learning_rate", type=float, default=0.005)
+    parser.add_argument("--encoder_layer_sizes", type=int, nargs='+', default=[784, 512, 256])
+    parser.add_argument("--decoder_layer_sizes", type=int, nargs='+', default=[256, 512, 784])
     parser.add_argument("--latent_size", type=int, default=2)
     parser.add_argument("--print_every", type=int, default=100)
     parser.add_argument("--fig_root", type=str, default='figs')
