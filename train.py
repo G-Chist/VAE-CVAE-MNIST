@@ -3,8 +3,9 @@ import time
 import torch
 import argparse
 import pandas as pd
-import seaborn as sns
+import matplotlib.cm as cm
 import matplotlib.pyplot as plt
+import numpy as np
 from torchvision import transforms
 from torchvision.datasets import MNIST
 from torch.utils.data import DataLoader
@@ -110,12 +111,42 @@ def main(args):
                 plt.close('all')
 
         df = pd.DataFrame.from_dict(tracker_epoch, orient='index')
-        g = sns.lmplot(
-            x='x', y='y', hue='label', data=df.groupby('label').head(100),
-            fit_reg=False, legend=True)
-        g.savefig(os.path.join(
-            args.fig_root, str(ts), "E{:d}-Dist.png".format(epoch)),
-            dpi=300)
+
+        plt.figure(figsize=(6, 6))
+
+        df_limited = df.groupby('label').head(100)
+        # Create a color map for labels
+        labels = sorted(df_limited['label'].unique())
+        colors = cm.tab10(np.linspace(0, 1, len(labels)))
+
+        for label, color in zip(labels, colors):
+            subset = df_limited[df_limited['label'] == label]
+            plt.scatter(subset['x'], subset['y'], label=label, color=color, s=10, alpha=0.7)
+
+        plt.xlabel("x")
+        plt.ylabel("y")
+        plt.legend(title="label", markerscale=2, fontsize=8)
+
+        plt.savefig(
+            os.path.join(args.fig_root, str(ts), "E{:d}-Dist.png".format(epoch)),
+            dpi=300
+        )
+        plt.clf()
+        plt.close('all')
+
+        # Save weights
+        if not os.path.exists("weights"):
+            os.mkdir("weights")
+
+        weight_filename = (
+            f"vae_e{args.epochs}_bs{args.batch_size}_lr{args.learning_rate}_"
+            f"enc{'-'.join(map(str, args.encoder_layer_sizes))}_"
+            f"dec{'-'.join(map(str, args.decoder_layer_sizes))}_"
+            f"z{args.latent_size}.pth"
+        )
+
+        torch.save(vae.state_dict(), os.path.join("weights", weight_filename))
+        print(f"Saved weights to weights/{weight_filename}")
 
 
 if __name__ == '__main__':
