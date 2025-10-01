@@ -28,7 +28,7 @@ class VAE(nn.Module):
     def forward(self, x, c=None):
 
         if x.dim() > 2:
-            x = x.view(-1, 28*28)
+            x = x.view(-1, 512*512)
 
         means, log_var = self.encoder(x, c)
         z = self.reparameterize(means, log_var)
@@ -37,10 +37,9 @@ class VAE(nn.Module):
         return recon_x, means, log_var, z
 
     def reparameterize(self, mu, log_var):
-
+        log_var = torch.clamp(log_var, -10, 10)  # prevents huge std
         std = torch.exp(0.5 * log_var)
         eps = torch.randn_like(std)
-
         return mu + eps * std
 
     def inference(self, z, c=None):

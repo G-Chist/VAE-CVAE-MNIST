@@ -12,6 +12,8 @@ from torchvision.datasets import MNIST
 from torch.utils.data import DataLoader
 from collections import defaultdict
 
+IMG_SIZE = 512
+
 from models import VAE
 
 img_path = r"C:\Users\79140\PycharmProjects\VAE-CVAE-MNIST\examples\2.png"
@@ -72,12 +74,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--epochs", type=int, default=30)
-    parser.add_argument("--batch_size", type=int, default=128)
+    parser.add_argument("--batch_size", type=int, default=8)
     parser.add_argument("--learning_rate", type=float, default=0.005)
-    parser.add_argument("--encoder_layer_sizes", type=int, nargs='+', default=[784, 512, 256])
-    parser.add_argument("--decoder_layer_sizes", type=int, nargs='+', default=[256, 512, 784])
-    parser.add_argument("--latent_size", type=int, default=2)
-    parser.add_argument("--print_every", type=int, default=100)
+    parser.add_argument("--encoder_layer_sizes", type=int, nargs='+', default=[IMG_SIZE*IMG_SIZE, 512, 256])
+    parser.add_argument("--decoder_layer_sizes", type=int, nargs='+', default=[256, 512, IMG_SIZE*IMG_SIZE])
+    parser.add_argument("--latent_size", type=int, default=64)
+    parser.add_argument("--print_every", type=int, default=32)
     parser.add_argument("--fig_root", type=str, default='figs')
     parser.add_argument("--conditional", action='store_true')
     parser.add_argument("--weight_path", type=str, default='weights/vae_e10_bs64_lr0.001_enc784-256_dec256-784_z10.pth')

@@ -10,8 +10,11 @@ from torchvision import transforms
 from torchvision.datasets import MNIST
 from torch.utils.data import DataLoader
 from collections import defaultdict
+from terrain_dataset import TerrainDataset
 
 from models import VAE
+
+IMG_SIZE = 512
 
 
 def main(args):
@@ -24,18 +27,32 @@ def main(args):
 
     ts = time.time()
 
-    dataset = MNIST(
-        root='data', train=True, transform=transforms.ToTensor(),
-        download=True)
-    data_loader = DataLoader(
-        dataset=dataset, batch_size=args.batch_size, shuffle=True)
+    dataset = TerrainDataset(root_dir=r"C:\Users\79140\PycharmProjects\procedural-terrain-generation\data\datapoints_png")
+
+    data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
+
+    print(len(data_loader))
+
+    print(data_loader)
 
     def loss_fn(recon_x, x, mean, log_var):
-        BCE = torch.nn.functional.binary_cross_entropy(
-            recon_x.view(-1, 28*28), x.view(-1, 28*28), reduction='sum')
-        KLD = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
+        batch_size = x.size(0)
+        img_flat_size = x[0].numel()
 
-        return (BCE + KLD) / x.size(0)
+        # prevent BCE NaNs
+        epsilon = 1e-7
+        recon_x = torch.clamp(recon_x, epsilon, 1.0 - epsilon)
+
+        BCE = torch.nn.functional.binary_cross_entropy(
+            recon_x.view(batch_size, img_flat_size),
+            x.view(batch_size, img_flat_size),
+            reduction='mean'
+        )
+
+        log_var = torch.clamp(log_var, -10, 10)
+        KLD = -0.5 * torch.mean(1 + log_var - mean.pow(2) - log_var.exp())
+
+        return BCE + KLD
 
     vae = VAE(
         encoder_layer_sizes=args.encoder_layer_sizes,
@@ -52,14 +69,16 @@ def main(args):
 
         tracker_epoch = defaultdict(lambda: defaultdict(dict))
 
-        for iteration, (x, y) in enumerate(data_loader):
+        for iteration, x in enumerate(data_loader):
 
+            y = torch.zeros(args.batch_size, dtype=torch.long, device=device)  # dummy labels
             x, y = x.to(device), y.to(device)
 
             if args.conditional:
                 recon_x, mean, log_var, z = vae(x, y)
             else:
                 recon_x, mean, log_var, z = vae(x)
+                # print(recon_x.min().item(), recon_x.max().item())
 
             for i, yi in enumerate(y):
                 id = len(tracker_epoch)
@@ -95,7 +114,7 @@ def main(args):
                         plt.text(
                             0, 0, "c={:d}".format(c[p].item()), color='black',
                             backgroundcolor='white', fontsize=8)
-                    plt.imshow(x[p].view(28, 28).cpu().data.numpy())
+                    plt.imshow(x[p].view(IMG_SIZE, IMG_SIZE).cpu().data.numpy())
                     plt.axis('off')
 
                 if not os.path.exists(os.path.join(args.fig_root, str(ts))):
@@ -165,12 +184,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--epochs", type=int, default=30)
-    parser.add_argument("--batch_size", type=int, default=128)
-    parser.add_argument("--learning_rate", type=float, default=0.005)
-    parser.add_argument("--encoder_layer_sizes", type=int, nargs='+', default=[784, 512, 256])
-    parser.add_argument("--decoder_layer_sizes", type=int, nargs='+', default=[256, 512, 784])
-    parser.add_argument("--latent_size", type=int, default=2)
-    parser.add_argument("--print_every", type=int, default=100)
+    parser.add_argument("--batch_size", type=int, default=8)
+    parser.add_argument("--learning_rate", type=float, default=1e-4)
+    parser.add_argument("--encoder_layer_sizes", type=int, nargs='+', default=[IMG_SIZE*IMG_SIZE, 512, 256])
+    parser.add_argument("--decoder_layer_sizes", type=int, nargs='+', default=[256, 512, IMG_SIZE*IMG_SIZE])
+    parser.add_argument("--latent_size", type=int, default=64)
+    parser.add_argument("--print_every", type=int, default=32)
     parser.add_argument("--fig_root", type=str, default='figs')
     parser.add_argument("--conditional", action='store_true')
 
