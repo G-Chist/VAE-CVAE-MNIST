@@ -25,15 +25,15 @@ def main(args):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+    print(f"Device: {device}")
+
     ts = time.time()
 
     dataset = TerrainDataset(root_dir=r"C:\Users\79140\PycharmProjects\procedural-terrain-generation\data\datapoints_png")
 
     data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
 
-    print(len(data_loader))
-
-    print(data_loader)
+    print(f"Dataset length: {len(data_loader)}")
 
     def loss_fn(recon_x, x, mean, log_var):
         batch_size = x.size(0)
