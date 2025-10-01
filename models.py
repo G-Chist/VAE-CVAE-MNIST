@@ -1,116 +1,71 @@
 import torch
 import torch.nn as nn
-
-from utils import idx2onehot
+import torch.nn.functional as F
 
 
 class VAE(nn.Module):
-
-    def __init__(self, encoder_layer_sizes, latent_size, decoder_layer_sizes,
-                 conditional=False, num_labels=0):
-
+    def __init__(self, latent_size=64):
         super().__init__()
-
-        if conditional:
-            assert num_labels > 0
-
-        assert type(encoder_layer_sizes) == list
-        assert type(latent_size) == int
-        assert type(decoder_layer_sizes) == list
-
         self.latent_size = latent_size
 
-        self.encoder = Encoder(
-            encoder_layer_sizes, latent_size, conditional, num_labels)
-        self.decoder = Decoder(
-            decoder_layer_sizes, latent_size, conditional, num_labels)
+        # Encoder: input 1x512x512
+        self.encoder = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=4, stride=2, padding=1),  # 32x256x256
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),  # 64x128x128
+            nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),  # 128x64x64
+            nn.ReLU(),
+            nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1),  # 256x32x32
+            nn.ReLU(),
+            nn.Conv2d(256, 512, kernel_size=4, stride=2, padding=1),  # 512x16x16
+            nn.ReLU()
+        )
 
-    def forward(self, x, c=None):
+        # Flatten feature size
+        self.enc_shape = (512, 16, 16)
+        feat_dim = 512 * 16 * 16
 
-        if x.dim() > 2:
-            x = x.view(-1, 512*512)
+        # Latent projections
+        self.fc_mu = nn.Linear(feat_dim, latent_size)
+        self.fc_logvar = nn.Linear(feat_dim, latent_size)
 
-        means, log_var = self.encoder(x, c)
-        z = self.reparameterize(means, log_var)
-        recon_x = self.decoder(z, c)
+        # Decoder FC back to feature space
+        self.fc_decoder = nn.Linear(latent_size, feat_dim)
 
-        return recon_x, means, log_var, z
+        # Decoder: transpose conv
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(512, 256, kernel_size=4, stride=2, padding=1),  # 256x32x32
+            nn.ReLU(),
+            nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1),  # 128x64x64
+            nn.ReLU(),
+            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),   # 64x128x128
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),    # 32x256x256
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, 1, kernel_size=4, stride=2, padding=1),     # 1x512x512
+            nn.Sigmoid()
+        )
 
-    def reparameterize(self, mu, log_var):
-        log_var = torch.clamp(log_var, -10, 10)  # prevents huge std
-        std = torch.exp(0.5 * log_var)
+    def encode(self, x):
+        h = self.encoder(x)
+        h_flat = h.view(h.size(0), -1)
+        mu = self.fc_mu(h_flat)
+        logvar = self.fc_logvar(h_flat)
+        return mu, logvar
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
 
-    def inference(self, z, c=None):
+    def decode(self, z):
+        h = self.fc_decoder(z)
+        h = h.view(z.size(0), *self.enc_shape)
+        return self.decoder(h)
 
-        recon_x = self.decoder(z, c)
-
-        return recon_x
-
-
-class Encoder(nn.Module):
-
-    def __init__(self, layer_sizes, latent_size, conditional, num_labels):
-
-        super().__init__()
-
-        self.conditional = conditional
-        if self.conditional:
-            layer_sizes[0] += num_labels
-
-        self.MLP = nn.Sequential()
-
-        for i, (in_size, out_size) in enumerate(zip(layer_sizes[:-1], layer_sizes[1:])):
-            self.MLP.add_module(
-                name="L{:d}".format(i), module=nn.Linear(in_size, out_size))
-            self.MLP.add_module(name="A{:d}".format(i), module=nn.ReLU())
-
-        self.linear_means = nn.Linear(layer_sizes[-1], latent_size)
-        self.linear_log_var = nn.Linear(layer_sizes[-1], latent_size)
-
-    def forward(self, x, c=None):
-
-        if self.conditional:
-            c = idx2onehot(c, n=10)
-            x = torch.cat((x, c), dim=-1)
-
-        x = self.MLP(x)
-
-        means = self.linear_means(x)
-        log_vars = self.linear_log_var(x)
-
-        return means, log_vars
-
-
-class Decoder(nn.Module):
-
-    def __init__(self, layer_sizes, latent_size, conditional, num_labels):
-
-        super().__init__()
-
-        self.MLP = nn.Sequential()
-
-        self.conditional = conditional
-        if self.conditional:
-            input_size = latent_size + num_labels
-        else:
-            input_size = latent_size
-
-        for i, (in_size, out_size) in enumerate(zip([input_size]+layer_sizes[:-1], layer_sizes)):
-            self.MLP.add_module(
-                name="L{:d}".format(i), module=nn.Linear(in_size, out_size))
-            if i+1 < len(layer_sizes):
-                self.MLP.add_module(name="A{:d}".format(i), module=nn.ReLU())
-            else:
-                self.MLP.add_module(name="sigmoid", module=nn.Sigmoid())
-
-    def forward(self, z, c):
-
-        if self.conditional:
-            c = idx2onehot(c, n=10)
-            z = torch.cat((z, c), dim=-1)
-
-        x = self.MLP(z)
-
-        return x
+    def forward(self, x):
+        mu, logvar = self.encode(x)
+        z = self.reparameterize(mu, logvar)
+        recon = self.decode(z)
+        return recon, mu, logvar, z
