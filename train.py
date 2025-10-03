@@ -33,7 +33,7 @@ def main(args):
         recon_flat = recon_x.view(batch_size, -1)
         recon_flat = torch.clamp(recon_flat, 1e-7, 1-1e-7)
 
-        BCE = torch.nn.functional.binary_cross_entropy(recon_flat, x_flat, reduction='mean')
+        BCE = torch.nn.functional.binary_cross_entropy(recon_flat, x_flat, reduction='sum')
         KLD = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
         return BCE + KLD
 
@@ -87,8 +87,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--epochs", type=int, default=30)
-    parser.add_argument("--batch_size", type=int, default=8)
-    parser.add_argument("--learning_rate", type=float, default=1e-4)
+    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--learning_rate", type=float, default=1e-5)
     parser.add_argument("--latent_size", type=int, default=64)
     parser.add_argument("--print_every", type=int, default=20)
     parser.add_argument("--fig_root", type=str, default='figs')
